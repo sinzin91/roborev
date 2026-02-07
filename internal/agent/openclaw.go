@@ -12,7 +12,9 @@ import (
 // maxOutputSize limits captured stdout/stderr to prevent memory exhaustion
 const maxOutputSize = 1 << 20 // 1MB
 
-// OpenClawAgent runs code reviews using the OpenClaw gateway
+// OpenClawAgent runs code reviews and fixes using the OpenClaw gateway.
+// OpenClaw agents have full shell/file access, making them suitable for
+// both review (read-only analysis) and fix (autonomous code changes) workflows.
 type OpenClawAgent struct {
 	Command string // The openclaw command to run (default: "openclaw")
 }
@@ -40,13 +42,21 @@ func (a *OpenClawAgent) WithAgentic() *OpenClawAgent {
 	return &agentCopy
 }
 
-// Review runs a code review using the OpenClaw CLI.
-// commitSHA is part of the Agent interface but unused here; OpenClaw reviews
-// the current working directory state, not a specific commit.
+// Review runs a code review or fix using the OpenClaw CLI.
+// The same method handles both review and fix operations - roborev passes
+// different prompts for each. OpenClaw agents can read files (for review)
+// and write files (for fix) since they have full shell/file access.
+//
+// commitSHA is part of the Agent interface but unused here; OpenClaw operates
+// on the current working directory state, not a specific commit.
+//
+// Note: Output is capped at 1MB to prevent memory exhaustion. If the agent
+// produces more output, it will be silently truncated.
 func (a *OpenClawAgent) Review(ctx context.Context, repoPath, commitSHA, prompt string) (string, error) {
 	// OpenClaw CLI: openclaw run "<prompt>"
-	// Runs a one-shot agent turn with the given prompt
-	_ = commitSHA // unused: OpenClaw reviews current state, not specific commits
+	// Runs a one-shot agent turn with the given prompt.
+	// For fixes, the prompt contains instructions to modify files.
+	_ = commitSHA // unused: OpenClaw operates on current working directory
 	args := []string{"run", prompt}
 
 	cmd := exec.CommandContext(ctx, a.Command, args...)
@@ -120,6 +130,9 @@ func (l *limitedWriter) Write(p []byte) (int, error) {
 // truncate returns s truncated to approximately maxLen runes with an ellipsis if needed.
 // Uses rune-aware truncation to avoid splitting UTF-8 characters.
 func truncate(s string, maxLen int) string {
+	if maxLen <= 0 {
+		return ""
+	}
 	if len(s) <= maxLen {
 		return s
 	}

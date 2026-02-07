@@ -97,6 +97,10 @@ func TestTruncate(t *testing.T) {
 		// UTF-8: should not split multibyte chars
 		{"héllo", 3, "hél..."},
 		{"日本語テスト", 3, "日本語..."},
+		// Edge cases: zero and negative maxLen
+		{"hello", 0, ""},
+		{"hello", -1, ""},
+		{"", 0, ""},
 	}
 
 	for _, tc := range cases {
